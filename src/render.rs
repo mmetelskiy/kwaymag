@@ -24,8 +24,8 @@ impl GlResources {
             gl::GenTextures(1, &mut texture);
 
             gl::BindTexture(gl::TEXTURE_2D, texture);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
             gl::BindTexture(gl::TEXTURE_2D, 0);
@@ -95,38 +95,47 @@ impl GlResources {
         }
     }
 
-    /// Blit the captured source region (in screen coordinates, y=0 at top) to
-    /// the window draw FBO (y=0 at bottom in GL convention).
+    /// Blit a source region into a destination rectangle within the window.
     ///
-    /// The Y axis is flipped to convert from screen coords (top-origin) to
-    /// GL window coords (bottom-origin). The DMA-BUF EGL image has its first
-    /// row mapped to GL FBO y=0 (bottom), so a dst-flip is required.
+    /// All coordinates are in screen/window space with y=0 at the top.
+    /// The destination Y axis is flipped for GL convention internally.
+    /// Areas of the window outside `dst` are cleared to black, so the caller
+    /// can pass a smaller destination when the source is clipped at a border.
     pub fn blit(
         &self,
         src_x: i32,
         src_y: i32,
         src_w: i32,
         src_h: i32,
+        dst_x: i32,
+        dst_y: i32,
+        dst_w: i32,
+        dst_h: i32,
         win_w: i32,
         win_h: i32,
     ) {
         unsafe {
-            gl::BindFramebuffer(gl::READ_FRAMEBUFFER, self.src_fbo);
+            // Clear to black first so the border area (outside dst) is black.
             gl::BindFramebuffer(gl::DRAW_FRAMEBUFFER, 0);
+            gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+            gl::Clear(gl::COLOR_BUFFER_BIT);
 
-            // Flip destination Y so that screen-top (FBO y=0 in source)
-            // appears at window top (GL y=win_h in destination).
+            gl::BindFramebuffer(gl::READ_FRAMEBUFFER, self.src_fbo);
+
+            // Y-flip: screen y=0 is top; GL y=0 is bottom.
+            // dst_y (screen top of blit) → GL y = win_h - dst_y
+            // dst_y + dst_h (screen bottom) → GL y = win_h - (dst_y + dst_h)
             gl::BlitFramebuffer(
                 src_x,
                 src_y,
                 src_x + src_w,
                 src_y + src_h,
-                0,
-                win_h, // dst y0 = top of window
-                win_w,
-                0, // dst y1 = bottom of window
+                dst_x,
+                win_h - dst_y,
+                dst_x + dst_w,
+                win_h - (dst_y + dst_h),
                 gl::COLOR_BUFFER_BIT,
-                gl::LINEAR,
+                gl::NEAREST,
             );
 
             gl::BindFramebuffer(gl::READ_FRAMEBUFFER, 0);

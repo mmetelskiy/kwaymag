@@ -47,10 +47,16 @@ use wayland_client::{
     },
     Connection, Dispatch, Proxy, QueueHandle,
 };
-use wayland_protocols::xdg::shell::client::{
-    xdg_surface::{self, XdgSurface},
-    xdg_toplevel::{self, XdgToplevel},
-    xdg_wm_base::{self, XdgWmBase},
+use wayland_protocols::xdg::{
+    decoration::zv1::client::{
+        zxdg_decoration_manager_v1::ZxdgDecorationManagerV1,
+        zxdg_toplevel_decoration_v1::{self, ZxdgToplevelDecorationV1},
+    },
+    shell::client::{
+        xdg_surface::{self, XdgSurface},
+        xdg_toplevel::{self, XdgToplevel},
+        xdg_wm_base::{self, XdgWmBase},
+    },
 };
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -99,6 +105,7 @@ pub struct AppState {
     compositor: Option<WlCompositor>,
     xdg_wm_base: Option<XdgWmBase>,
     seat: Option<WlSeat>,
+    decoration_mgr: Option<ZxdgDecorationManagerV1>,
 
     surface: Option<WlSurface>,
     xdg_surface: Option<XdgSurface>,
@@ -128,6 +135,7 @@ impl AppState {
             compositor: None,
             xdg_wm_base: None,
             seat: None,
+            decoration_mgr: None,
             surface: None,
             xdg_surface: None,
             xdg_toplevel: None,
@@ -183,12 +191,30 @@ impl AppState {
         let half_w = win_w / (2.0 * self.zoom);
         let half_h = win_h / (2.0 * self.zoom);
 
-        let sx0 = (self.region_cx - half_w).max(0.0) as i32;
-        let sy0 = (self.region_cy - half_h).max(0.0) as i32;
-        let sx1 = ((self.region_cx + half_w) as i32).min(buf_w as i32);
-        let sy1 = ((self.region_cy + half_h) as i32).min(buf_h as i32);
+        // Full (unclamped) source region — may extend past buffer edges.
+        let full_sx0 = self.region_cx - half_w;
+        let full_sy0 = self.region_cy - half_h;
+        let full_sx1 = self.region_cx + half_w;
+        let full_sy1 = self.region_cy + half_h;
 
-        gl_res.blit(sx0, sy0, sx1 - sx0, sy1 - sy0, self.window_width, self.window_height);
+        // Clamp to buffer bounds.
+        let sx0 = full_sx0.max(0.0) as i32;
+        let sy0 = full_sy0.max(0.0) as i32;
+        let sx1 = full_sx1.min(buf_w) as i32;
+        let sy1 = full_sy1.min(buf_h) as i32;
+
+        // Destination rectangle: shrink proportionally to match the clipped source,
+        // so the zoom level is preserved and no stretching occurs.
+        let dst_x = ((sx0 as f64 - full_sx0) * self.zoom).round() as i32;
+        let dst_y = ((sy0 as f64 - full_sy0) * self.zoom).round() as i32;
+        let dst_w = ((sx1 - sx0) as f64 * self.zoom).round() as i32;
+        let dst_h = ((sy1 - sy0) as f64 * self.zoom).round() as i32;
+
+        gl_res.blit(
+            sx0, sy0, sx1 - sx0, sy1 - sy0,
+            dst_x, dst_y, dst_w, dst_h,
+            self.window_width, self.window_height,
+        );
         self.egl_ctx.as_ref().context("no EGL context")?.swap_buffers()?;
         Ok(())
     }
@@ -225,6 +251,9 @@ impl Dispatch<WlRegistry, ()> for AppState {
             }
             "wl_seat" => {
                 state.seat = Some(registry.bind(name, version.min(8), qh, ()));
+            }
+            "zxdg_decoration_manager_v1" => {
+                state.decoration_mgr = Some(registry.bind(name, version.min(1), qh, ()));
             }
             _ => {}
         }
@@ -358,6 +387,20 @@ impl Dispatch<WlSurface, ()> for AppState {
     }
 }
 
+// Server-side decoration: accept whatever mode the compositor configures.
+impl Dispatch<ZxdgToplevelDecorationV1, ()> for AppState {
+    fn event(
+        _: &mut Self,
+        _: &ZxdgToplevelDecorationV1,
+        _: zxdg_toplevel_decoration_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+delegate_noop!(AppState: ZxdgDecorationManagerV1);
 delegate_noop!(AppState: WlCompositor);
 delegate_noop!(AppState: WlShmPool);
 delegate_noop!(AppState: WlBuffer);
@@ -557,6 +600,16 @@ fn main() -> Result<()> {
     let xdg_toplevel: XdgToplevel = xdg_surface.get_toplevel(&qh, ());
     xdg_toplevel.set_title("kmag".into());
     xdg_toplevel.set_app_id("kmag".into());
+
+    // Request server-side decorations (title bar, borders, buttons).
+    // Must be done before the first commit so the compositor knows before configure.
+    if let Some(mgr) = &state.decoration_mgr {
+        let decoration = mgr.get_toplevel_decoration(&xdg_toplevel, &qh, ());
+        decoration.set_mode(zxdg_toplevel_decoration_v1::Mode::ServerSide);
+    } else {
+        log::warn!("zxdg_decoration_manager_v1 not available; window will have no frame");
+    }
+
     surface.commit();
 
     state.surface = Some(surface);
