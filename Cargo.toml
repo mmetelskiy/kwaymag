@@ -1,0 +1,25 @@
+[package]
+name = "kmag"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "kmag"
+path = "src/main.rs"
+
+[dependencies]
+wayland-client    = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+wayland-egl       = "0.32"
+khronos-egl       = { version = "6", features = ["dynamic"] }
+gl                = "0.14"
+drm-fourcc        = "2"
+nix               = { version = "0.29", features = ["mman", "fs", "poll"] }
+log               = "0.4"
+env_logger        = "0.11"
+anyhow            = "1"
+
+# Screen capture via xdg-desktop-portal + PipeWire
+pipewire          = { version = "0.9", features = ["v0_3_33"] }
+ashpd             = { version = "0.9", default-features = false, features = ["tokio"] }
+tokio             = { version = "1", features = ["rt", "macros"] }
