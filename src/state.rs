@@ -182,8 +182,8 @@ impl AppState {
         // Clamp to buffer bounds.
         let sx0 = full_sx0.max(0.0) as i32;
         let sy0 = full_sy0.max(0.0) as i32;
-        let sx1 = full_sx1.min(buf_w) as i32;
-        let sy1 = full_sy1.min(buf_h) as i32;
+        let sx1 = full_sx1.min(buf_w).ceil() as i32;
+        let sy1 = full_sy1.min(buf_h).ceil() as i32;
 
         // Destination rectangle: shrink proportionally to match the clipped source,
         // so the zoom level is preserved and no stretching occurs.
