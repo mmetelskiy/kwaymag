@@ -38,7 +38,7 @@ use wayland_protocols::{
     },
 };
 
-use crate::state::{AppState, ZOOM_STEP};
+use crate::state::AppState;
 
 impl Dispatch<WlRegistry, ()> for AppState {
     fn event(
@@ -210,7 +210,7 @@ impl Dispatch<WlPointer, ()> for AppState {
             }
             wl_pointer::Event::Axis { axis, value, .. } => {
                 if axis == wayland_client::WEnum::Value(wl_pointer::Axis::VerticalScroll) {
-                    state.adjust_zoom(-value * ZOOM_STEP / 15.0);
+                    state.adjust_zoom_multiplicative(-value / 15.0);
                 }
             }
             _ => {}

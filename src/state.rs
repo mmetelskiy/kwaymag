@@ -36,7 +36,7 @@ use crate::{egl, render};
 pub const DEFAULT_WINDOW_W: i32 = 400;
 pub const DEFAULT_WINDOW_H: i32 = 300;
 const DEFAULT_ZOOM: f64 = 2.0;
-pub const ZOOM_STEP: f64 = 0.25;
+pub const ZOOM_FACTOR: f64 = 1.1;
 const ZOOM_MIN: f64 = 1.0;
 const ZOOM_MAX: f64 = 32.0;
 
@@ -201,8 +201,8 @@ impl AppState {
         Ok(())
     }
 
-    pub fn adjust_zoom(&mut self, delta: f64) {
-        self.zoom = (self.zoom + delta).clamp(ZOOM_MIN, ZOOM_MAX);
+    pub fn adjust_zoom_multiplicative(&mut self, ticks: f64) {
+        self.zoom = (self.zoom * ZOOM_FACTOR.powf(ticks)).clamp(ZOOM_MIN, ZOOM_MAX);
         log::debug!("zoom = {:.2}", self.zoom);
     }
 
