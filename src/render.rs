@@ -111,7 +111,7 @@ impl GlResources {
         dst_y: i32,
         dst_w: i32,
         dst_h: i32,
-        win_w: i32,
+        _win_w: i32,
         win_h: i32,
     ) {
         unsafe {

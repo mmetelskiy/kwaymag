@@ -47,15 +47,27 @@ use wayland_client::{
     },
     Connection, Dispatch, Proxy, QueueHandle,
 };
-use wayland_protocols::xdg::{
-    decoration::zv1::client::{
-        zxdg_decoration_manager_v1::ZxdgDecorationManagerV1,
-        zxdg_toplevel_decoration_v1::{self, ZxdgToplevelDecorationV1},
+use wayland_protocols::{
+    wp::{
+        pointer_constraints::zv1::client::{
+            zwp_locked_pointer_v1::{self, ZwpLockedPointerV1},
+            zwp_pointer_constraints_v1::{self, ZwpPointerConstraintsV1},
+        },
+        relative_pointer::zv1::client::{
+            zwp_relative_pointer_manager_v1::ZwpRelativePointerManagerV1,
+            zwp_relative_pointer_v1::{self, ZwpRelativePointerV1},
+        },
     },
-    shell::client::{
-        xdg_surface::{self, XdgSurface},
-        xdg_toplevel::{self, XdgToplevel},
-        xdg_wm_base::{self, XdgWmBase},
+    xdg::{
+        decoration::zv1::client::{
+            zxdg_decoration_manager_v1::ZxdgDecorationManagerV1,
+            zxdg_toplevel_decoration_v1::{self, ZxdgToplevelDecorationV1},
+        },
+        shell::client::{
+            xdg_surface::{self, XdgSurface},
+            xdg_toplevel::{self, XdgToplevel},
+            xdg_wm_base::{self, XdgWmBase},
+        },
     },
 };
 
@@ -115,9 +127,16 @@ pub struct AppState {
     window_configured: bool,
 
     pointer: Option<WlPointer>,
+    pointer_constraints: Option<ZwpPointerConstraintsV1>,
+    relative_pointer_mgr: Option<ZwpRelativePointerManagerV1>,
+    locked_pointer: Option<ZwpLockedPointerV1>,
+    relative_pointer: Option<ZwpRelativePointerV1>,
     drag_active: bool,
     ptr_x: f64,
     ptr_y: f64,
+    // Virtual cursor position tracked during drag for wrapping
+    drag_vx: f64,
+    drag_vy: f64,
 
     egl_ctx: Option<egl::EglContext>,
     gl_res: Option<render::GlResources>,
@@ -143,9 +162,15 @@ impl AppState {
             window_height: DEFAULT_WINDOW_H,
             window_configured: false,
             pointer: None,
+            pointer_constraints: None,
+            relative_pointer_mgr: None,
+            locked_pointer: None,
+            relative_pointer: None,
             drag_active: false,
             ptr_x: 0.0,
             ptr_y: 0.0,
+            drag_vx: 0.0,
+            drag_vy: 0.0,
             egl_ctx: None,
             gl_res: None,
             region_cx: 0.0,
@@ -255,6 +280,12 @@ impl Dispatch<WlRegistry, ()> for AppState {
             "zxdg_decoration_manager_v1" => {
                 state.decoration_mgr = Some(registry.bind(name, version.min(1), qh, ()));
             }
+            "zwp_pointer_constraints_v1" => {
+                state.pointer_constraints = Some(registry.bind(name, version.min(1), qh, ()));
+            }
+            "zwp_relative_pointer_manager_v1" => {
+                state.relative_pointer_mgr = Some(registry.bind(name, version.min(1), qh, ()));
+            }
             _ => {}
         }
     }
@@ -346,21 +377,51 @@ impl Dispatch<WlPointer, ()> for AppState {
         event: wl_pointer::Event,
         _: &(),
         _: &Connection,
-        _: &QueueHandle<Self>,
+        qh: &QueueHandle<Self>,
     ) {
         match event {
             wl_pointer::Event::Button { button, state: btn_state, .. } => {
-                if button == 272 {
-                    state.drag_active =
-                        btn_state == wayland_client::WEnum::Value(wl_pointer::ButtonState::Pressed);
+                if button != 272 {
+                    return;
+                }
+                let pressed =
+                    btn_state == wayland_client::WEnum::Value(wl_pointer::ButtonState::Pressed);
+                state.drag_active = pressed;
+
+                if pressed {
+                    // Lock pointer and start receiving relative motion.
+                    state.drag_vx = state.ptr_x;
+                    state.drag_vy = state.ptr_y;
+                    if let (Some(constraints), Some(rel_mgr), Some(surface), Some(stored_ptr)) = (
+                        state.pointer_constraints.as_ref(),
+                        state.relative_pointer_mgr.as_ref(),
+                        state.surface.as_ref(),
+                        state.pointer.as_ref(),
+                    ) {
+                        let locked = constraints.lock_pointer(
+                            surface,
+                            stored_ptr,
+                            None,
+                            zwp_pointer_constraints_v1::Lifetime::Persistent,
+                            qh,
+                            (),
+                        );
+                        state.locked_pointer = Some(locked);
+                        state.relative_pointer =
+                            Some(rel_mgr.get_relative_pointer(stored_ptr, qh, ()));
+                    }
+                } else {
+                    if let Some(lp) = state.locked_pointer.take() {
+                        lp.destroy();
+                    }
+                    if let Some(rp) = state.relative_pointer.take() {
+                        rp.destroy();
+                    }
                 }
             }
             wl_pointer::Event::Motion { surface_x, surface_y, .. } => {
-                if state.drag_active {
-                    let dx = surface_x - state.ptr_x;
-                    let dy = surface_y - state.ptr_y;
-                    state.pan(dx, dy);
-                }
+                // Track absolute position (used to seed drag_vx/drag_vy on press).
+                // Panning is handled by ZwpRelativePointerV1 while locked.
                 state.ptr_x = surface_x;
                 state.ptr_y = surface_y;
             }
@@ -400,6 +461,88 @@ impl Dispatch<ZxdgToplevelDecorationV1, ()> for AppState {
     }
 }
 
+// Relative motion: pan the view and wrap the virtual cursor at window edges.
+impl Dispatch<ZwpRelativePointerV1, ()> for AppState {
+    fn event(
+        state: &mut Self,
+        _: &ZwpRelativePointerV1,
+        event: zwp_relative_pointer_v1::Event,
+        _: &(),
+        _: &Connection,
+        qh: &QueueHandle<Self>,
+    ) {
+        let zwp_relative_pointer_v1::Event::RelativeMotion {
+            dx_unaccel,
+            dy_unaccel,
+            ..
+        } = event
+        else {
+            return;
+        };
+
+        state.pan(dx_unaccel, dy_unaccel);
+
+        state.drag_vx += dx_unaccel;
+        state.drag_vy += dy_unaccel;
+
+        let win_w = state.window_width as f64;
+        let win_h = state.window_height as f64;
+        // Leave a 1 px margin so the wrapped position is clearly inside the window.
+        const MARGIN: f64 = 1.0;
+
+        let mut needs_warp = false;
+        if state.drag_vx < MARGIN {
+            state.drag_vx += win_w - 2.0 * MARGIN;
+            needs_warp = true;
+        } else if state.drag_vx > win_w - MARGIN {
+            state.drag_vx -= win_w - 2.0 * MARGIN;
+            needs_warp = true;
+        }
+        if state.drag_vy < MARGIN {
+            state.drag_vy += win_h - 2.0 * MARGIN;
+            needs_warp = true;
+        } else if state.drag_vy > win_h - MARGIN {
+            state.drag_vy -= win_h - 2.0 * MARGIN;
+            needs_warp = true;
+        }
+
+        if needs_warp {
+            let vx = state.drag_vx;
+            let vy = state.drag_vy;
+            // Set the position hint and destroy+relock: the compositor moves the
+            // cursor to the hinted position when the lock is released, then the
+            // new lock freezes it there — giving the "teleport" visual.
+            if let Some(lp) = &state.locked_pointer {
+                lp.set_cursor_position_hint(vx, vy);
+            }
+            if let Some(lp) = state.locked_pointer.take() {
+                lp.destroy();
+            }
+            if let (Some(constraints), Some(surface), Some(pointer)) = (
+                state.pointer_constraints.as_ref(),
+                state.surface.as_ref(),
+                state.pointer.as_ref(),
+            ) {
+                state.locked_pointer = Some(constraints.lock_pointer(
+                    surface,
+                    pointer,
+                    None,
+                    zwp_pointer_constraints_v1::Lifetime::Persistent,
+                    qh,
+                    (),
+                ));
+            }
+        }
+    }
+}
+
+delegate_noop!(AppState: ZwpPointerConstraintsV1);
+delegate_noop!(AppState: ZwpRelativePointerManagerV1);
+
+// ZwpLockedPointerV1 sends `locked` and `unlocked` events — accept silently.
+impl Dispatch<ZwpLockedPointerV1, ()> for AppState {
+    fn event(_: &mut Self, _: &ZwpLockedPointerV1, _: zwp_locked_pointer_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {}
+}
 delegate_noop!(AppState: ZxdgDecorationManagerV1);
 delegate_noop!(AppState: WlCompositor);
 delegate_noop!(AppState: WlShmPool);
