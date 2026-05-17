@@ -1,10 +1,10 @@
 [package]
-name = "kmag"
+name = "kwaymag"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "kmag"
+name = "kwaymag"
 path = "src/main.rs"
 
 [dependencies]

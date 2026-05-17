@@ -67,7 +67,7 @@ pub fn connect_pipewire_stream(
 
     let stream = StreamRc::new(
         core,
-        "kmag-capture",
+        "kwaymag-capture",
         properties! {
             "media.type" => "Video",
             "media.category" => "Capture",

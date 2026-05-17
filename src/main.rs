@@ -71,8 +71,8 @@ fn main() -> Result<()> {
         .unwrap()
         .get_xdg_surface(&surface, &qh, ());
     let xdg_toplevel: XdgToplevel = xdg_surface.get_toplevel(&qh, ());
-    xdg_toplevel.set_title("kmag".into());
-    xdg_toplevel.set_app_id("kmag".into());
+    xdg_toplevel.set_title("kwaymag".into());
+    xdg_toplevel.set_app_id("kwaymag".into());
 
     // Request server-side decorations (title bar, borders, buttons).
     // Must be done before the first commit so the compositor knows before configure.
