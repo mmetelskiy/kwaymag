@@ -2,7 +2,7 @@
 
 A Wayland screen magnifier — replacement for [kmag](https://apps.kde.org/kmag/) on Wayland desktops.
 
-Vibe coded in 2 evenings. Uses xdg-desktop-portal for screen capture via PipeWire and renders a magnified view in a floating window.
+Tested on Kubuntu 26.04 LTS with Wayland
 
 ## Requirements
 
@@ -44,3 +44,15 @@ rm ~/.local/share/kwaymag/restore_token
 ```
 
 If `XDG_DATA_HOME` is set, the file lives at `$XDG_DATA_HOME/kwaymag/restore_token` instead.
+
+## What didn't work
+
+- "follow the mouse" mode - wayland doesn't allow the app to get the mouse position
+- avoid recursive portal - wayland doesn't allow the app to get it's position on the screen and pipewire has no api to exclude the window from the screencast
+- hide the cursor while dragging - I was able to hide it but wasn't able to restore (though I think it's possible)
+
+## Support
+
+I vibecoded it in 3 evenings for personal use and have no plans to support the project
+
+Feel free to fork and add the features you need
