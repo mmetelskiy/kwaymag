@@ -52,8 +52,7 @@ impl GlResources {
         })
     }
 
-    #[allow(dead_code)]
-    pub fn bind_egl_image(&self, egl_image: khronos_egl::Image) {
+    pub fn bind_egl_image(&self, egl: &crate::egl::EglContext, egl_image: khronos_egl::Image) {
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.texture);
             (self.gl_egl_image_target)(gl::TEXTURE_2D, egl_image.as_ptr());
@@ -68,6 +67,9 @@ impl GlResources {
                 0,
             );
             gl::BindFramebuffer(gl::READ_FRAMEBUFFER, 0);
+        }
+        if let Err(e) = egl.instance.destroy_image(egl.display, egl_image) {
+            log::warn!("eglDestroyImage: {e}");
         }
     }
 

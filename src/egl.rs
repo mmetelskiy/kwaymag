@@ -97,6 +97,18 @@ impl EglContext {
                 .unwrap_or(std::ptr::null())
         });
 
+        if let Ok(exts) = lib.query_string(Some(display), egl::EXTENSIONS) {
+            let exts = exts.to_string_lossy();
+            let dmabuf_import = exts.contains("EGL_EXT_image_dma_buf_import");
+            let dmabuf_modifiers = exts.contains("EGL_EXT_image_dma_buf_import_modifiers");
+            log::info!(
+                "EGL DmaBuf support: import={dmabuf_import} modifiers={dmabuf_modifiers}"
+            );
+            if !dmabuf_import {
+                log::warn!("EGL_EXT_image_dma_buf_import not available — DmaBuf frames will fail");
+            }
+        }
+
         Ok(Self {
             instance: lib,
             display,
@@ -116,7 +128,6 @@ impl EglContext {
         self._wl_egl_surface.resize(width, height, 0, 0);
     }
 
-    #[allow(dead_code)]
     pub fn create_dmabuf_image(
         &self,
         width: u32,

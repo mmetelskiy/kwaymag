@@ -1,3 +1,5 @@
+use std::os::unix::io::AsRawFd;
+
 use anyhow::{Context, Result};
 use wayland_client::{
     protocol::{
@@ -42,27 +44,46 @@ const ZOOM_MAX: f64 = 32.0;
 
 // ─── shared capture state ─────────────────────────────────────────────────────
 
-pub struct CaptureState {
-    pub shm_frame: Option<ShmFrame>,
-    pub width: u32,
-    pub height: u32,
-    pub gl_format: gl::types::GLenum,
-    pub frame_ready: bool,
-}
-
 pub struct ShmFrame {
     pub data: Vec<u8>,
     pub width: u32,
     pub height: u32,
 }
 
+pub struct DmaBufFrame {
+    pub fd: std::os::unix::io::OwnedFd,
+    pub width: u32,
+    pub height: u32,
+    pub fourcc: u32,
+    pub modifier: u64,
+    pub offset: u32,
+    pub stride: u32,
+}
+
+pub enum Frame {
+    Shm(ShmFrame),
+    DmaBuf(DmaBufFrame),
+}
+
+pub struct CaptureState {
+    pub frame: Option<Frame>,
+    pub width: u32,
+    pub height: u32,
+    pub gl_format: gl::types::GLenum,
+    pub fourcc: u32,
+    pub modifier: u64,
+    pub frame_ready: bool,
+}
+
 impl CaptureState {
     pub fn new() -> Self {
         Self {
-            shm_frame: None,
+            frame: None,
             width: 0,
             height: 0,
             gl_format: gl::RGBA,
+            fourcc: 0x34325258, // DRM_FORMAT_XRGB8888
+            modifier: 0,
             frame_ready: false,
         }
     }
@@ -151,13 +172,23 @@ impl AppState {
     }
 
     pub fn render(&mut self, cap: &mut CaptureState) -> Result<()> {
+        let egl_ctx = self.egl_ctx.as_ref().context("no EGL context")?;
         let gl_res = self.gl_res.as_ref().context("no GL resources")?;
 
-        let (buf_w, buf_h) = if let Some(frame) = &cap.shm_frame {
-            gl_res.upload_shm(&frame.data, frame.width, frame.height, cap.gl_format);
-            (frame.width as f64, frame.height as f64)
-        } else {
-            return Ok(());
+        let (buf_w, buf_h) = match &cap.frame {
+            Some(Frame::Shm(frame)) => {
+                gl_res.upload_shm(&frame.data, frame.width, frame.height, cap.gl_format);
+                (frame.width as f64, frame.height as f64)
+            }
+            Some(Frame::DmaBuf(frame)) => {
+                let image = egl_ctx.create_dmabuf_image(
+                    frame.width, frame.height, frame.fourcc,
+                    frame.fd.as_raw_fd(), frame.offset, frame.stride, frame.modifier,
+                )?;
+                gl_res.bind_egl_image(egl_ctx, image);
+                (frame.width as f64, frame.height as f64)
+            }
+            None => return Ok(()),
         };
 
         // Centre view on first frame
@@ -199,7 +230,7 @@ impl AppState {
         };
 
         gl_res.blit(src, dst, self.window_size.h);
-        self.egl_ctx.as_ref().context("no EGL context")?.swap_buffers()?;
+        egl_ctx.swap_buffers()?;
         Ok(())
     }
 
