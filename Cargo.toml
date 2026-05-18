@@ -14,6 +14,7 @@ wayland-egl       = "0.32"
 khronos-egl       = { version = "6", features = ["dynamic"] }
 gl                = "0.14"
 nix               = { version = "0.29", features = ["mman", "fs", "poll"] }
+clap               = { version = "4", features = ["derive"] }
 log               = "0.4"
 env_logger        = "0.11"
 anyhow            = "1"

@@ -13,6 +13,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
+use clap::Parser;
 use nix::poll::{poll, PollFd, PollFlags};
 use wayland_client::{
     protocol::{
@@ -28,8 +29,44 @@ use wayland_protocols::xdg::{
 use capture::connect_pipewire_stream;
 use state::{AppState, CaptureState};
 
+#[derive(Parser)]
+#[command(version, about = "Wayland screen magnifier")]
+struct Args {
+    /// Enable debug logging
+    #[arg(long)]
+    verbose: bool,
+    /// Initial zoom level (1.0–32.0)
+    #[arg(long, default_value_t = 2.0)]
+    zoom: f64,
+    /// Initial window size, e.g. 800x600
+    #[arg(long, value_name = "WxH", default_value = "400x300", value_parser = parse_size)]
+    size: (i32, i32),
+}
+
+fn parse_size(s: &str) -> Result<(i32, i32), String> {
+    let (w, h) = s.split_once('x').ok_or_else(|| format!("expected WxH (e.g. 800x600), got {s:?}"))?;
+    let w = w.parse::<i32>().map_err(|e| format!("bad width: {e}"))?;
+    let h = h.parse::<i32>().map_err(|e| format!("bad height: {e}"))?;
+    if w <= 0 || h <= 0 {
+        return Err("width and height must be positive".into());
+    }
+    Ok((w, h))
+}
+
 fn main() -> Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let args = Args::parse();
+    if !(1.0..=32.0).contains(&args.zoom) {
+        anyhow::bail!("--zoom must be between 1.0 and 32.0");
+    }
+    let default_level = if args.verbose {
+        "debug"
+    } else if cfg!(debug_assertions) {
+        "info"
+    } else {
+        "warn"
+    };
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(default_level))
+        .init();
 
     // ── Portal handshake (async) ──────────────────────────────────────────────
     log::info!("requesting screencast via xdg-desktop-portal…");
@@ -54,6 +91,8 @@ fn main() -> Result<()> {
     let _registry = conn.display().get_registry(&qh, ());
 
     let mut state = AppState::new();
+    state.zoom = args.zoom;
+    (state.window_width, state.window_height) = args.size;
     event_queue.roundtrip(&mut state).context("initial roundtrip")?;
 
     if state.compositor.is_none() {
