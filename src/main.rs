@@ -92,7 +92,7 @@ fn main() -> Result<()> {
 
     let mut state = AppState::new();
     state.zoom = args.zoom;
-    (state.window_width, state.window_height) = args.size;
+    state.window_size = render::Size { w: args.size.0, h: args.size.1 };
     event_queue.roundtrip(&mut state).context("initial roundtrip")?;
 
     if state.compositor.is_none() {

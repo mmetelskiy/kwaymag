@@ -79,8 +79,7 @@ pub struct AppState {
     pub surface: Option<WlSurface>,
     pub xdg_surface: Option<XdgSurface>,
     pub xdg_toplevel: Option<XdgToplevel>,
-    pub window_width: i32,
-    pub window_height: i32,
+    pub window_size: render::Size,
     pub window_configured: bool,
 
     pub pointer: Option<WlPointer>,
@@ -115,8 +114,7 @@ impl AppState {
             surface: None,
             xdg_surface: None,
             xdg_toplevel: None,
-            window_width: DEFAULT_WINDOW_W,
-            window_height: DEFAULT_WINDOW_H,
+            window_size: render::Size { w: DEFAULT_WINDOW_W, h: DEFAULT_WINDOW_H },
             window_configured: false,
             pointer: None,
             pointer_constraints: None,
@@ -142,8 +140,8 @@ impl AppState {
         let ctx = egl::EglContext::new(
             wl_display_ptr,
             surface_id,
-            self.window_width,
-            self.window_height,
+            self.window_size.w,
+            self.window_size.h,
         )?;
         let gl_res = render::GlResources::new(&ctx)?;
         self.egl_ctx = Some(ctx);
@@ -168,8 +166,8 @@ impl AppState {
             self.region_cy = buf_h / 2.0;
         }
 
-        let win_w = self.window_width as f64;
-        let win_h = self.window_height as f64;
+        let win_w = self.window_size.w as f64;
+        let win_h = self.window_size.h as f64;
         let half_w = win_w / (2.0 * self.zoom);
         let half_h = win_h / (2.0 * self.zoom);
 
@@ -187,16 +185,20 @@ impl AppState {
 
         // Destination rectangle: shrink proportionally to match the clipped source,
         // so the zoom level is preserved and no stretching occurs.
-        let dst_x = ((sx0 as f64 - full_sx0) * self.zoom).round() as i32;
-        let dst_y = ((sy0 as f64 - full_sy0) * self.zoom).round() as i32;
-        let dst_w = ((sx1 - sx0) as f64 * self.zoom).round() as i32;
-        let dst_h = ((sy1 - sy0) as f64 * self.zoom).round() as i32;
+        let src = render::Rect {
+            x: sx0,
+            y: sy0,
+            w: sx1 - sx0,
+            h: sy1 - sy0,
+        };
+        let dst = render::Rect {
+            x: ((sx0 as f64 - full_sx0) * self.zoom).round() as i32,
+            y: ((sy0 as f64 - full_sy0) * self.zoom).round() as i32,
+            w: ((sx1 - sx0) as f64 * self.zoom).round() as i32,
+            h: ((sy1 - sy0) as f64 * self.zoom).round() as i32,
+        };
 
-        gl_res.blit(
-            sx0, sy0, sx1 - sx0, sy1 - sy0,
-            dst_x, dst_y, dst_w, dst_h,
-            self.window_width, self.window_height,
-        );
+        gl_res.blit(src, dst, self.window_size.h);
         self.egl_ctx.as_ref().context("no EGL context")?.swap_buffers()?;
         Ok(())
     }

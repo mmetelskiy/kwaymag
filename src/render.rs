@@ -2,6 +2,18 @@ use anyhow::{anyhow, bail, Result};
 
 use crate::egl::{EglContext, GlEGLImageTargetTexture2DOES};
 
+pub struct Rect {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+}
+
+pub struct Size {
+    pub w: i32,
+    pub h: i32,
+}
+
 pub struct GlResources {
     pub src_fbo: gl::types::GLuint,
     pub texture: gl::types::GLuint,
@@ -101,19 +113,7 @@ impl GlResources {
     /// The destination Y axis is flipped for GL convention internally.
     /// Areas of the window outside `dst` are cleared to black, so the caller
     /// can pass a smaller destination when the source is clipped at a border.
-    pub fn blit(
-        &self,
-        src_x: i32,
-        src_y: i32,
-        src_w: i32,
-        src_h: i32,
-        dst_x: i32,
-        dst_y: i32,
-        dst_w: i32,
-        dst_h: i32,
-        _win_w: i32,
-        win_h: i32,
-    ) {
+    pub fn blit(&self, src: Rect, dst: Rect, win_h: i32) {
         unsafe {
             // Clear to black first so the border area (outside dst) is black.
             gl::BindFramebuffer(gl::DRAW_FRAMEBUFFER, 0);
@@ -123,17 +123,17 @@ impl GlResources {
             gl::BindFramebuffer(gl::READ_FRAMEBUFFER, self.src_fbo);
 
             // Y-flip: screen y=0 is top; GL y=0 is bottom.
-            // dst_y (screen top of blit) → GL y = win_h - dst_y
-            // dst_y + dst_h (screen bottom) → GL y = win_h - (dst_y + dst_h)
+            // dst.y (screen top of blit) → GL y = win_h - dst.y
+            // dst.y + dst.h (screen bottom) → GL y = win_h - (dst.y + dst.h)
             gl::BlitFramebuffer(
-                src_x,
-                src_y,
-                src_x + src_w,
-                src_y + src_h,
-                dst_x,
-                win_h - dst_y,
-                dst_x + dst_w,
-                win_h - (dst_y + dst_h),
+                src.x,
+                src.y,
+                src.x + src.w,
+                src.y + src.h,
+                dst.x,
+                win_h - dst.y,
+                dst.x + dst.w,
+                win_h - (dst.y + dst.h),
                 gl::COLOR_BUFFER_BIT,
                 gl::NEAREST,
             );

@@ -117,8 +117,7 @@ impl Dispatch<XdgToplevel, ()> for AppState {
         match event {
             xdg_toplevel::Event::Configure { width, height, .. } => {
                 if width > 0 && height > 0 {
-                    state.window_width = width;
-                    state.window_height = height;
+                    state.window_size = crate::render::Size { w: width, h: height };
                     if let Some(egl_ctx) = &state.egl_ctx {
                         egl_ctx.resize(width, height);
                     }
@@ -268,8 +267,8 @@ impl Dispatch<ZwpRelativePointerV1, ()> for AppState {
         state.drag_vx += dx_unaccel;
         state.drag_vy += dy_unaccel;
 
-        let win_w = state.window_width as f64;
-        let win_h = state.window_height as f64;
+        let win_w = state.window_size.w as f64;
+        let win_h = state.window_size.h as f64;
         // Leave a 1 px margin so the wrapped position is clearly inside the window.
         const MARGIN: f64 = 1.0;
 
