@@ -108,7 +108,6 @@ pub struct AppState {
     pub relative_pointer_mgr: Option<ZwpRelativePointerManagerV1>,
     pub locked_pointer: Option<ZwpLockedPointerV1>,
     pub relative_pointer: Option<ZwpRelativePointerV1>,
-    pub drag_active: bool,
     pub ptr_x: f64,
     pub ptr_y: f64,
     // Virtual cursor position tracked during drag for wrapping
@@ -142,7 +141,6 @@ impl AppState {
             relative_pointer_mgr: None,
             locked_pointer: None,
             relative_pointer: None,
-            drag_active: false,
             ptr_x: 0.0,
             ptr_y: 0.0,
             drag_vx: 0.0,

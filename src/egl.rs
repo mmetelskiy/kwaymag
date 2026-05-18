@@ -3,14 +3,13 @@ use khronos_egl as egl;
 use wayland_client::backend::ObjectId;
 use wayland_egl::WlEglSurface;
 
-#[allow(dead_code)]
 pub const EGL_LINUX_DMA_BUF_EXT: u32 = 0x3270;
-#[allow(dead_code)] pub const EGL_LINUX_DRM_FOURCC_EXT: usize = 0x3271;
-#[allow(dead_code)] pub const EGL_DMA_BUF_PLANE0_FD_EXT: usize = 0x3272;
-#[allow(dead_code)] pub const EGL_DMA_BUF_PLANE0_OFFSET_EXT: usize = 0x3273;
-#[allow(dead_code)] pub const EGL_DMA_BUF_PLANE0_PITCH_EXT: usize = 0x3274;
-#[allow(dead_code)] pub const EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT: usize = 0x3443;
-#[allow(dead_code)] pub const EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT: usize = 0x3444;
+pub const EGL_LINUX_DRM_FOURCC_EXT: usize = 0x3271;
+pub const EGL_DMA_BUF_PLANE0_FD_EXT: usize = 0x3272;
+pub const EGL_DMA_BUF_PLANE0_OFFSET_EXT: usize = 0x3273;
+pub const EGL_DMA_BUF_PLANE0_PITCH_EXT: usize = 0x3274;
+pub const EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT: usize = 0x3443;
+pub const EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT: usize = 0x3444;
 
 pub type GlEGLImageTargetTexture2DOES =
     unsafe extern "C" fn(target: gl::types::GLenum, image: *mut std::ffi::c_void);

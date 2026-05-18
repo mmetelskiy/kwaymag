@@ -17,7 +17,6 @@ pub struct Size {
 pub struct GlResources {
     pub src_fbo: gl::types::GLuint,
     pub texture: gl::types::GLuint,
-    #[allow(dead_code)]
     gl_egl_image_target: GlEGLImageTargetTexture2DOES,
 }
 

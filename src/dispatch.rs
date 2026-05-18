@@ -168,7 +168,6 @@ impl Dispatch<WlPointer, ()> for AppState {
                 }
                 let pressed =
                     btn_state == wayland_client::WEnum::Value(wl_pointer::ButtonState::Pressed);
-                state.drag_active = pressed;
 
                 if pressed {
                     // Lock pointer and start receiving relative motion.
