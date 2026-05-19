@@ -40,6 +40,8 @@ use wayland_protocols::{
 
 use crate::state::AppState;
 
+const BTN_LEFT: u32 = 272;
+
 impl Dispatch<WlRegistry, ()> for AppState {
     fn event(
         state: &mut Self,
@@ -163,7 +165,7 @@ impl Dispatch<WlPointer, ()> for AppState {
     ) {
         match event {
             wl_pointer::Event::Button { button, state: btn_state, .. } => {
-                if button != 272 {
+                if button != BTN_LEFT {
                     return;
                 }
                 let pressed =
@@ -208,7 +210,8 @@ impl Dispatch<WlPointer, ()> for AppState {
             }
             wl_pointer::Event::Axis { axis, value, .. } => {
                 if axis == wayland_client::WEnum::Value(wl_pointer::Axis::VerticalScroll) {
-                    state.adjust_zoom_multiplicative(-value / 15.0);
+                    let (px, py) = (state.ptr_x, state.ptr_y);
+                    state.adjust_zoom_multiplicative(-value / 15.0, px, py);
                 }
             }
             _ => {}
@@ -322,7 +325,15 @@ delegate_noop!(AppState: ZwpRelativePointerManagerV1);
 
 // ZwpLockedPointerV1 sends `locked` and `unlocked` events — accept silently.
 impl Dispatch<ZwpLockedPointerV1, ()> for AppState {
-    fn event(_: &mut Self, _: &ZwpLockedPointerV1, _: zwp_locked_pointer_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {}
+    fn event(
+        _: &mut Self,
+        _: &ZwpLockedPointerV1,
+        _: zwp_locked_pointer_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
 }
 
 delegate_noop!(AppState: ZxdgDecorationManagerV1);

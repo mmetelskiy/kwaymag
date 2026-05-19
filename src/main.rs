@@ -90,7 +90,7 @@ fn main() -> Result<()> {
     let qh = event_queue.handle();
     let _registry = conn.display().get_registry(&qh, ());
 
-    let mut state = AppState::new();
+    let mut state = AppState::default();
     state.zoom = args.zoom;
     state.window_size = render::Size { w: args.size.0, h: args.size.1 };
     event_queue.roundtrip(&mut state).context("initial roundtrip")?;
@@ -148,7 +148,7 @@ fn main() -> Result<()> {
     conn.flush().context("flush after initial frame")?;
 
     // ── PipeWire stream ───────────────────────────────────────────────────────
-    let cap = Rc::new(RefCell::new(CaptureState::new()));
+    let cap = Rc::new(RefCell::new(CaptureState::default()));
 
     let (pw_mainloop, _stream_keep_alive, _listener_keep_alive) = connect_pipewire_stream(
         portal_stream.pw_fd,

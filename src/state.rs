@@ -75,8 +75,8 @@ pub struct CaptureState {
     pub frame_ready: bool,
 }
 
-impl CaptureState {
-    pub fn new() -> Self {
+impl Default for CaptureState {
+    fn default() -> Self {
         Self {
             frame: None,
             width: 0,
@@ -124,8 +124,8 @@ pub struct AppState {
     pub running: bool,
 }
 
-impl AppState {
-    pub fn new() -> Self {
+impl Default for AppState {
+    fn default() -> Self {
         Self {
             compositor: None,
             xdg_wm_base: None,
@@ -153,7 +153,9 @@ impl AppState {
             running: true,
         }
     }
+}
 
+impl AppState {
     pub fn init_egl(&mut self, wl_display_ptr: *mut std::ffi::c_void) -> Result<()> {
         let surface_id = self.surface.as_ref().context("surface not created")?.id();
         let ctx = egl::EglContext::new(
@@ -232,12 +234,21 @@ impl AppState {
         Ok(())
     }
 
-    pub fn adjust_zoom_multiplicative(&mut self, ticks: f64) {
+    pub fn adjust_zoom_multiplicative(&mut self, ticks: f64, ptr_x: f64, ptr_y: f64) {
+        let old_zoom = self.zoom;
         self.zoom = (self.zoom * ZOOM_FACTOR.powf(ticks)).clamp(ZOOM_MIN, ZOOM_MAX);
+
+        // Shift the view center so the buffer point under the cursor stays fixed.
+        let win_w = self.window_size.w as f64;
+        let win_h = self.window_size.h as f64;
+        self.region_cx += (ptr_x - win_w / 2.0) * (1.0 / old_zoom - 1.0 / self.zoom);
+        self.region_cy += (ptr_y - win_h / 2.0) * (1.0 / old_zoom - 1.0 / self.zoom);
+
         log::debug!("zoom = {:.2}", self.zoom);
     }
 
     pub fn pan(&mut self, dx: f64, dy: f64) {
+        // Clamps to 0 but not to the buffer max — render() handles the upper edge via src clamping.
         self.region_cx = (self.region_cx - dx / self.zoom).max(0.0);
         self.region_cy = (self.region_cy - dy / self.zoom).max(0.0);
     }
